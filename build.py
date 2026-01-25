@@ -3,6 +3,13 @@ import feedparser
 from datetime import datetime, timezone
 import html
 import re
+import socket
+
+# -------------------------
+# GLOBAL SAFETY
+# -------------------------
+# Prevent hanging on flaky feeds
+socket.setdefaulttimeout(20)
 
 # -------------------------
 # FEEDS (LOCKED IN)
@@ -26,65 +33,78 @@ NEWS_FEEDS = [
 MAX_PER_FEED = 10
 
 # Simple color rotation (w3m-friendly)
-COLORS = ["#00ff66", "#66ccff", "#ffcc66", "#ff66cc", "#ccccff", "#66ffcc", "#ff6666"]
+COLORS = [
+    "#00ff66",
+    "#66ccff",
+    "#ffcc66",
+    "#ff66cc",
+    "#ccccff",
+    "#66ffcc",
+    "#ff6666",
+]
 
 def esc(s: str) -> str:
     return html.escape(s or "")
 
 def entry_link(e):
-    return getattr(e, "link", None) or (e.get("links",[{}])[0].get("href") if e.get("links") else "")
+    return (
+        getattr(e, "link", None)
+        or (e.get("links", [{}])[0].get("href") if e.get("links") else "")
+    )
 
 def icon_for(title: str):
     """
-    w3m-safe markers. We use ASCII-first, with optional Unicode fallback.
+    w3m-safe ASCII markers.
     """
     t = (title or "").lower()
 
-    # severe / urgent
     severe = [
-        "warning", "tornado", "hurricane", "extreme", "life-threatening", "flash flood",
-        "winter storm warning", "blizzard", "severe thunderstorm warning"
+        "warning", "tornado", "hurricane", "extreme",
+        "life-threatening", "flash flood",
+        "winter storm warning", "blizzard",
+        "severe thunderstorm warning"
     ]
-    watch = ["watch", "severe thunderstorm watch", "tornado watch", "hurricane watch"]
-    advisory = ["advisory", "statement", "outlook", "special weather statement"]
+    watch = ["watch", "tornado watch", "hurricane watch"]
+    advisory = ["advisory", "statement", "outlook"]
 
-    heat = ["heat", "excessive heat"]
-    flood = ["flood", "flash flood"]
-    winter = ["winter", "snow", "ice", "freeze", "blizzard"]
-    wind = ["wind", "gale"]
-    fire = ["fire", "red flag"]
-
-    # Priority order:
     if any(k in t for k in severe):
-        return "(!)"   # or "⚠" if you want riskier Unicode
+        return "(!)"
     if any(k in t for k in watch):
         return "(*)"
     if any(k in t for k in advisory):
         return "(i)"
-    if any(k in t for k in fire):
-        return "(fire)"
-    if any(k in t for k in heat):
-        return "(heat)"
-    if any(k in t for k in flood):
-        return "(flood)"
-    if any(k in t for k in winter):
-        return "(cold)"
-    if any(k in t for k in wind):
-        return "(wind)"
     return "(>)"
 
 def write_section(parts, title, feeds):
     parts.append(f"<h2>{esc(title)}</h2>")
     parts.append("<hr>")
+
     for i, (name, url) in enumerate(feeds):
         color = COLORS[i % len(COLORS)]
-        d = feedparser.parse(url)
 
-        # Source header (colored)
-        parts.append(f"<p><b><font color='{color}'>{esc(name)}</font></b><br><small>{esc(url)}</small></p>")
+        # ---- FAIL-SOFT FEED PARSE ----
+        try:
+            d = feedparser.parse(
+                url,
+                request_headers={"User-Agent": "BlackwireRSS/1.0"}
+            )
+        except Exception as ex:
+            parts.append(
+                f"<p><b><font color='{color}'>{esc(name)}</font></b><br>"
+                f"<small>{esc(url)}</small></p>"
+            )
+            parts.append(f"<p><i>Feed error: {esc(str(ex))}</i></p>")
+            parts.append("<hr>")
+            continue
+
+        # Source header
+        parts.append(
+            f"<p><b><font color='{color}'>{esc(name)}</font></b><br>"
+            f"<small>{esc(url)}</small></p>"
+        )
 
         if getattr(d, "bozo", False):
-            parts.append("<p><i>Feed parse issue (may still partially work).</i></p>")
+            parts.append("<p><i>Feed parse issue (partial data).</i></p>")
 
         parts.append("<ul>")
         for e in (d.entries or [])[:MAX_PER_FEED]:
@@ -92,12 +112,12 @@ def write_section(parts, title, feeds):
             mark = icon_for(title_txt)
             link = esc(entry_link(e))
             title_html = esc(title_txt)
-
-            # Light cleanup (optional): collapse repeated whitespace
             title_html = re.sub(r"\s+", " ", title_html).strip()
 
             if link:
-                parts.append(f"<li>{esc(mark)} <a href='{link}'>{title_html}</a></li>")
+                parts.append(
+                    f"<li>{esc(mark)} <a href='{link}'>{title_html}</a></li>"
+                )
             else:
                 parts.append(f"<li>{esc(mark)} {title_html}</li>")
         parts.append("</ul>")
@@ -110,14 +130,14 @@ def main(out_path="index.html"):
     parts.append("<!doctype html>")
     parts.append("<html><head><meta charset='utf-8'>")
     parts.append("<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    parts.append("<title>Text Wire</title></head><body>")
-    parts.append("<h1>Text Wire</h1>")
+    parts.append("<title>Blackwire</title></head><body>")
+    parts.append("<h1>Blackwire</h1>")
     parts.append(f"<p><small>Updated: {esc(now)}</small></p>")
 
-    # Weather on top
+    # Weather first
     write_section(parts, "Weather", WEATHER_FEEDS)
 
-    # News below
+    # News second
     write_section(parts, "News", NEWS_FEEDS)
 
     parts.append("</body></html>")

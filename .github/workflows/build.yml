@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: blackwire-pages
   cancel-in-progress: true
 
 jobs:
@@ -44,5 +44,4 @@ jobs:
           path: site
 
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4

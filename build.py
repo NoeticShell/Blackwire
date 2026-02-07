@@ -137,10 +137,25 @@ def main(out_path="index.html"):
     # Weather first
     write_section(parts, "Weather", WEATHER_FEEDS)
 
-    # News second
+        # News second
     write_section(parts, "News", NEWS_FEEDS)
 
+    # -------------------------
+    # SECURE CONTACT FOOTER
+    # -------------------------
+    parts.append("<h2>Secure Contact</h2>")
+    parts.append("<hr>")
+    parts.append("<pre>")
+    parts.append("Blackwire Secure Channel\n")
+    parts.append("Matrix (End-to-End Encryption Capable)")
+    parts.append("Direct: @nsblackwire:matrix.org")
+    parts.append("Room:   #blackwire:matrix.org\n")
+    parts.append("Federated • Encrypted • Open Protocol")
+    parts.append("</pre>")
+    parts.append("<hr>")
+
     parts.append("</body></html>")
+
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(parts))
